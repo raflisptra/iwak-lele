@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SiLele</title>
+<meta name="description" content="Dashboard monitoring suhu, pH, dan ketinggian air kolam lele berbasis IoT (ESP32 + MQTT/HTTP/WebSocket) dengan ApexCharts. PBL PNJ." />
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('silele-theme')||'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
+</head>
+<body>
+
+<!-- ===== LOGIN OVERLAY (sesuai proposal 6.1.2: auth username & password) ===== -->
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-card">
+    <div style="text-align: center;" class="login-logo"><i class="fa-solid fa-fish"></i> SiLele<span>IoT</span></div>
+    <label>Username</label>
+    <input type="text" id="loginUser" placeholder="admin" autocomplete="username" />
+    <label>Password</label>
+    <input type="password" id="loginPass" placeholder="••••••" autocomplete="current-password" />
+    <button id="btnLogin"><i class="fa-solid fa-right-to-bracket"></i> Masuk Dashboard</button>
+    <p id="loginError" class="login-error"></p>
+  </div>
+</div>
+
+<div class="layout" id="appLayout" style="display:none">
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><i class="fa-solid fa-fish"></i> SiLele<span>IoT</span></div>
+    <nav>
+      <button class="nav-btn active" data-target="section-dashboard"><i class="fa-solid fa-gauge-high"></i> Dashboard</button>
+      <button class="nav-btn" data-target="section-qos"><i class="fa-solid fa-chart-column"></i> Perbandingan QoS</button>
+      <button class="nav-btn" data-target="section-skenario"><i class="fa-solid fa-network-wired"></i> Skenario Uji</button>
+      <button class="nav-btn" data-target="section-log"><i class="fa-solid fa-table-list"></i> Log Data</button>
+    </nav>
+    <div class="side-box">
+      <h4>Status Protokol</h4>
+      <div class="proto-row"><span class="dot ok" id="dot-mqtt"></span> MQTT <small>192.168.0.21</small><b id="proto-mqtt">ON</b></div>
+      <div class="proto-row"><span class="dot ok" id="dot-http"></span> HTTP <small>192.168.0.22</small><b id="proto-http">ON</b></div>
+      <div class="proto-row"><span class="dot ok" id="dot-ws"></span> WS <small>192.168.0.23</small><b id="proto-ws">ON</b></div>
+      <div class="proto-toggle">
+        <label><input type="checkbox" id="sim-mqtt" checked /> MQTT</label>
+        <label><input type="checkbox" id="sim-http" checked /> HTTP</label>
+        <label><input type="checkbox" id="sim-ws" checked /> WS</label>
+      </div>
+    </div>
+    <button id="btnLogout" class="btn-logout"><i class="fa-solid fa-right-from-bracket"></i> Keluar</button>
+  </aside>
+  <div id="sideOverlay" class="side-overlay"></div>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+    <header class="topbar">
+      <button id="btnMenu" class="btn-menu" aria-label="Buka menu navigasi"><i class="fa-solid fa-bars"></i></button>
+      <div class="top-title">
+        <h1 id="pageTitle">Dashboard Monitoring Kolam</h1>
+      </div>
+      <div class="top-right">
+        <button id="btnTheme" class="btn btn-theme" title="Ganti mode gelap / terang"><i class="fa-solid fa-moon" id="themeIcon"></i> <span id="themeLabel">Gelap</span></button>
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="admin-chip"><i class="fa-solid fa-user-shield"></i> Admin</div>
+        <button id="btnExport" class="btn"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+      </div>
+    </header>
+
+    <div id="alertBanner" class="alert-banner warn"><i class="fa-solid fa-triangle-exclamation"></i> <span id="alertText">Mode slot kosong: sensor belum terpasang. Hubungkan ESP32 untuk menampilkan data.</span></div>
+
+    <!-- ============ SECTION: DASHBOARD ============ -->
+    <!--
+      TODO - SLOT DATA DASHBOARD (HTML):
+      - Nilai sensor TIDAK ditulis di sini, melainkan diisi otomatis oleh js/app.js
+        lewat fungsi updateDashboard() -> BAGIAN 8 di js/app.js
+      - Yang perlu Anda cek di HTML ini hanya ID slot di bawah (jangan ubah ID-nya):
+        #valSuhu, #valPh, #valLevel          -> angka besar di kartu
+        #statSuhu, #statPh, #statLevel        -> teks status Ideal/Tidak
+        #gaugeSuhu, #gaugePh, #gaugeLevel      -> gauge ApexCharts
+        #chartSuhu, #chartPh, #chartLevel      -> grafik ApexCharts
+        #payloadPreview                       -> preview JSON dari ESP32
+        #logBody                              -> baris tabel log
+        #eventList                            -> riwayat peringatan
+      - Saat sensor sudah terpasang: Anda TIDAK perlu edit HTML ini,
+        cukup isi BAGIAN 0 + BAGIAN 8 + BAGIAN 9 di js/app.js
+    -->
+    <section id="section-dashboard" class="section active">
+      <!-- SLOT KARTU NILAI TERKINI: dikosongkan, tampil "--" sampai sensor terpasang -->
+      <div class="cards">
+        <div class="card">
+          <div class="card-head"><i class="fa-solid fa-temperature-half c-suhu"></i> Suhu Air <span class="badge" id="badgeSuhu">DS18B20 • D4</span></div>
+          <!-- SLOT-1: NILAI SUHU (°C) | diisi via js/app.js -> document.getElementById('valSuhu') -->
+          <div class="card-val"><span id="valSuhu">--</span><small>°C</small></div>
+          <div class="card-foot">Ideal: 25–30°C (KKP) • <b id="statSuhu">Menunggu sensor…</b></div>
+          <div id="gaugeSuhu"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><i class="fa-solid fa-flask c-ph"></i> pH Air <span class="badge" id="badgePh">PH-4502C • A34</span></div>
+          <!-- SLOT-2: NILAI pH | diisi via js/app.js -> document.getElementById('valPh') -->
+          <div class="card-val"><span id="valPh">--</span><small>pH</small></div>
+          <div class="card-foot">Ideal: 7–8 (KKP) • <b id="statPh">Menunggu sensor…</b></div>
+          <div id="gaugePh"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><i class="fa-solid fa-water c-level"></i> Ketinggian Air <span class="badge">Level • A35</span></div>
+          <!-- SLOT-3: NILAI LEVEL (cm) | diisi via js/app.js -> document.getElementById('valLevel') -->
+          <div class="card-val"><span id="valLevel">--</span><small>cm</small></div>
+          <div class="card-foot">Aman: 60–80 cm • <b id="statLevel">Menunggu sensor…</b></div>
+          <div id="gaugeLevel"></div>
+        </div>
+        <div class="card dark">
+          <div class="card-head"><i class="fa-solid fa-satellite-dish"></i> Payload JSON</div>
+          <!-- SLOT-4: PAYLOAD JSON DARI ESP32 | diisi via js/app.js -> document.getElementById('payloadPreview') -->
+          <pre id="payloadPreview" class="payload">// SLOT KOSONG — payload JSON dari ESP32 akan muncul di sini
+// Contoh format yang ditunggu:
+// {
+//   "node_id": "ESP32-KOLAM-01",
+//   "suhu": 28.5,
+//   "ph": 7.4,
+//   "level_cm": 72,
+//   "timestamp": "2026-...",
+// }</pre>
+          <div class="card-foot">Format diseragamkan (proposal 6.5) • Interval <b id="intervalLabel">2</b> dtk
+            <input type="range" id="intervalRange" min="1" max="10" value="2" style="width:100%" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Grafik realtime 3 sensor -->
+      <!--
+        SLOT-5 s/d SLOT-7: GRAFIK APEXCHARTS (kosong sampai ada data)
+        - #chartSuhu  -> diisi dari js/app.js BAGIAN 7 + BAGIAN 8 (updateDashboard)
+        - #chartPh    -> sama
+        - #chartLevel -> sama
+        Jangan isi manual di HTML. Cukup isi data sensor di js/app.js.
+      -->
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head">
+            <h3><i class="fa-solid fa-temperature-half"></i> Grafik Suhu Real-time (3 Node Protokol)</h3>
+            <small>MQTT .21 • HTTP .22 • WS .23 — ApexCharts line</small>
+          </div>
+          <div id="chartSuhu"></div>
+          <p class="muted">Slot kosong — grafik terisi otomatis setelah sensor mengirim data. Lihat <code>js/app.js → BAGIAN 8</code>.</p>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h3><i class="fa-solid fa-flask"></i> Grafik pH Real-time</h3>
+            <small>Ambang ideal 7–8 ditandai area hijau</small>
+          </div>
+          <div id="chartPh"></div>
+          <p class="muted">Slot kosong — grafik terisi otomatis setelah sensor mengirim data.</p>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head">
+            <h3><i class="fa-solid fa-water"></i> Ketinggian Air Real-time</h3>
+            <small>Area chart + threshold 60/80 cm</small>
+          </div>
+          <div id="chartLevel"></div>
+          <p class="muted">Slot kosong — grafik terisi otomatis setelah sensor mengirim data.</p>
+        </div>
+        <!-- LOKASI KOLAM (menggantikan Status & Riwayat Peringatan agar dashboard penuh terisi) -->
+        <div class="panel map-mini">
+          <div class="panel-head">
+            <h3><i class="fa-solid fa-location-dot"></i> Lokasi Kolam</h3>
+          </div>
+          <p class="muted">Alamat: <a id="mapsAddress" target="_blank" rel="noopener">Gedung AA JTIK</a></p>
+          <div class="map-frame map-small">
+            <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3965.166211958889!2d106.8214017740985!3d-6.3725312623342045!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2e69ec04fac3ff69%3A0xd04a2bda7b13eaec!2sGedung%20AA%20JTIK!5e0!3m2!1sen!2sid!4v1792075307345!5m2!1sen!2sid" width="400" height="300" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            <a class="map-open" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&amp;query=Jl.%20Prof.%20Dr.%20G.A%20Siwabessy%2C%20Kukusan%2C%20Kecamatan%20Beji%2C%20Kota%20Depok%2C%20Jawa%20Barat%2016425"><i class="fa-solid fa-expand"></i> Klik untuk buka lokasi</a>
+          </div>
+          <!-- Riwayat peringatan tetap disimpan tersembunyi agar pushEvent() tidak error -->
+          <ul id="eventList" class="event-list" hidden><li>Menunggu data sensor…</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SECTION: QOS ============ -->
+    <!--
+      TODO - SLOT DATA QoS (hasil Wireshark/PCAP):
+      - Tabel + 5 grafik QoS di bawah dikosongkan (tampil "-").
+      - Cara isi: buka js/app.js → BAGIAN 5 (DATA_QOS), isi angka delay/jitter/loss/dst
+        per skenario pada subbab 6.10 setelah pengujian selesai.
+      - HTML ini tidak perlu diedit.
+    -->
+    <section id="section-qos" class="section">
+      <div class="panel">
+        <div class="panel-head">
+          <h3><i class="fa-solid fa-chart-column"></i> Perbandingan QoS MQTT vs HTTP vs WebSocket (Acuan TIPHON)</h3>
+          <div>
+            <label for="scenarioSelect">Skenario: </label>
+            <select id="scenarioSelect"></select>
+          </div>
+        </div>
+        <p class="muted">Delay, jitter, packet loss dinilai dengan kategori TIPHON. Throughput sebagai metrik pendukung. Response time, goodput, overhead sebagai metrik efisiensi (proposal 6.7). <b>Slot masih kosong</b> — isi angka hasil Wireshark/PCAP di <code>js/app.js → BAGIAN 5 (DATA_QOS)</code>.</p>
+        <!-- SLOT-9: TABEL QoS | diisi via js/app.js -> renderQosTable() dari DATA_QOS -->
+        <div class="qos-table-wrap"><table class="qos-table" id="qosTable"></table></div>
+      </div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>Delay (ms) per Skenario</h3></div><div id="chartQosDelay"></div></div>
+        <div class="panel"><div class="panel-head"><h3>Jitter (ms) per Skenario</h3></div><div id="chartQosJitter"></div></div>
+      </div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>Packet Loss (%)</h3></div><div id="chartQosLoss"></div></div>
+        <div class="panel"><div class="panel-head"><h3>Throughput (kbps)</h3></div><div id="chartQosThroughput"></div></div>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>Efisiensi: Response Time / Goodput / Overhead (kondisi terpilih)</h3></div><div id="chartEfficiency"></div></div>
+    </section>
+
+    <!-- ============ SECTION: SKENARIO ============ -->
+    <section id="section-skenario" class="section">
+      <div class="panel">
+        <div class="panel-head"><h3><i class="fa-solid fa-network-wired"></i> Skenario Pengujian</h3></div>
+        <div class="qos-table-wrap"><table class="qos-table">
+          <thead><tr><th>No. pada Proposal</th><th>Kelompok Skenario</th><th>Kondisi</th><th>Parameter Rekayasa</th><th>AES</th><th>Protokol yang Diuji</th><th>Status Hasil PCAP</th></tr></thead>
+          <tbody id="scenarioTable"></tbody>
+        </table></div>
+        <h4>Topologi</h4>
+        <pre class="topo">ESP32-MQTT(.21) ─┐
+ESP32-HTTP(.22) ─┼─ WiFi 2.4GHz ─ Router(.1) ─ Linux Gateway RPi(.10, tc/netem) ─ Server(.40: Mosquitto/HTTP/WS + DB + Web) ─ Smartphone
+ESP32-WS(.23)   ─┘                                          │ capture: Wireshark di Gateway/Server</pre>
+        <h4>Contoh perintah tc/netem sesuai subbab 6.10 (jalankan di Linux Gateway)</h4>
+        <p class="muted">Contoh di bawah menunjukkan satu nilai untuk setiap jenis impairment. Ulangi sesi pengujian dengan seluruh nilai yang tercantum pada proposal. Ganti <code>eth0</code> jika nama interface gateway berbeda. Terapkan satu jenis impairment saja per sesi.</p>
+        <pre class="topo"># Baseline: hapus impairment sebelum sesi dimulai
+tc qdisc del dev eth0 root 2&gt;/dev/null
+
+# Latency: ulangi +100 ms sampai +1000 ms
+tc qdisc replace dev eth0 root netem delay 100ms
+
+# Packet loss: ulangi 10% sampai 100%
+tc qdisc replace dev eth0 root netem loss 10%
+
+# Bandwidth: ulangi 1024, 512, 128, 64, 32, 16, 8, 4, 2, dan 1 Kbps
+tc qdisc replace dev eth0 root tbf rate 1024kbit burst 32kbit latency 400ms
+
+# Jalankan lagi sebelum beralih ke skenario berikutnya
+tc qdisc del dev eth0 root</pre>
+      </div>
+    </section>
+
+    <!-- ============ SECTION: LOG ============ -->
+    <!-- TODO - SLOT TABEL LOG: baris <tbody id="logBody"> dikosongkan.
+         Baris akan terisi otomatis oleh js/app.js BAGIAN 10 setiap ada data sensor masuk. -->
+    <section id="section-log" class="section">
+      <div class="panel">
+        <div class="panel-head">
+          <h3><i class="fa-solid fa-table-list"></i> Log Data Sensor Terakhir</h3>
+          <small id="logCount">0 baris — sensor belum terpasang</small>
+        </div>
+        <div class="qos-table-wrap"><table class="qos-table" id="logTable">
+          <thead><tr><th>Waktu</th><th>Node</th><th>Protokol</th><th>Suhu (°C)</th><th>pH</th><th>Level (cm)</th><th>Status</th></tr></thead>
+          <!-- SLOT-10: BARIS LOG DATA | diisi via js/app.js -> tambahLog() -->
+          <tbody id="logBody"><tr><td colspan="7">Belum ada data — sensor belum terpasang / belum mengirim.</td></tr></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <footer class="footer">SiLele IoT • © 2026 PNJ</footer>
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
