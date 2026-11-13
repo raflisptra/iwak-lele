@@ -1,0 +1,39 @@
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ESP32 secrets
+**/secrets.h
+
+# Node.js
+**/node_modules/
+*.log
+
+# SQLite database and journal
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+**/data/
+
+# Private keys / certificates
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Backups
+*.bak
+*.backup
+*.zip
+*.rar
+
+# Editor and OS
+.vscode/
+.DS_Store
+Thumbs.db

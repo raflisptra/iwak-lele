@@ -1,0 +1,7 @@
+# MQTT node hanya berhak publish satu topik.
+user pbllele
+topic write pond/mqtt-01/telemetry
+
+# Backend hanya berhak subscribe topik node tersebut.
+user backend
+topic read pond/mqtt-01/telemetry
