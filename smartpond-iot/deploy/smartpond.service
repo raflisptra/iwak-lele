@@ -1,0 +1,22 @@
+[Unit]
+Description=Smart Pond IoT Node.js backend
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smartpond
+Group=smartpond
+WorkingDirectory=/opt/smartpond/server
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/smartpond/server/server.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/smartpond/server/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

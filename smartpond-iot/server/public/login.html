@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Masuk · SiLele IoT</title>
+  <link rel="stylesheet" href="/assets/silele-login.css" />
+  <script src="/assets/silele-login.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <div class="intro"><div class="logo">SiLele<span>IoT</span></div><p>Monitoring kolam lele berbasis MQTT, HTTP, dan WebSocket</p></div>
+    <section class="panel" aria-labelledby="loginTitle">
+      <div class="eyebrow">AKSES MONITORING</div>
+      <h1 id="loginTitle">Masuk ke dashboard</h1>
+      <p class="helper">Gunakan akun yang diberikan administrator SiLele.</p>
+      <form id="loginForm">
+        <label for="username">Username</label>
+        <input id="username" name="username" required minlength="3" maxlength="40" autocomplete="username" autofocus />
+        <label for="password">Password</label>
+        <div class="pass-wrap"><input id="password" name="password" type="password" required autocomplete="current-password" /><button type="button" id="togglePass" aria-label="Tampilkan password">Lihat</button></div>
+        <p id="error" class="error" role="alert" aria-live="polite"></p>
+        <button type="submit" id="submit">Masuk</button>
+      </form>
+      <div class="foot">SiLele · Sistem monitoring IoT PBL</div>
+    </section>
+  </main>
+</body>
+</html>
